@@ -1,8 +1,5 @@
 # ============================================
-# REAL ESTATE WEB APP - Frontend
-# File: app.py
-# Streamlit interface with Ollama
-# Complete India Coverage - 70+ Cities
+# REAL ESTATE INDIA CHATBOT - FINAL WORKING
 # ============================================
 
 import streamlit as st
@@ -12,29 +9,29 @@ import os
 import random
 
 # -------------------------------------------------
-# NORMALIZE MODEL OUTPUT (VERY IMPORTANT)
+# NORMALIZE PROJECT DATA (CRITICAL FIX)
 # -------------------------------------------------
 def normalize_projects(projects):
     normalized = []
     for p in projects:
         normalized.append({
-            "name": p.get("name", ""),
-            "city": p.get("city", ""),
-            "property_type": p.get("property_type") or p.get("type", ""),
-            "price_min": p.get("price_min") or p.get("price", 0),
-            "price_max": p.get("price_max") or p.get("price", 0),
-            "location": p.get("location", ""),
-            "bedrooms": p.get("bedrooms", ""),
-            "developer": p.get("developer", ""),
-            "amenities": p.get("amenities", ""),
-            "possession_date": p.get("possession_date", ""),
-            "description": p.get("description", "")
+            "name": str(p.get("name", "Unknown Project")),
+            "city": str(p.get("city", "")),
+            "property_type": str(p.get("property_type", p.get("type", ""))),
+            "price_min": p.get("price_min", p.get("price", 0)) or 0,
+            "price_max": p.get("price_max", p.get("price", 0)) or 0,
+            "location": str(p.get("location", "")),
+            "bedrooms": str(p.get("bedrooms", "")),
+            "developer": str(p.get("developer", "")),
+            "amenities": str(p.get("amenities", "")),
+            "possession_date": str(p.get("possession_date", "")),
+            "description": str(p.get("description", ""))
         })
     return normalized
 
 
 # -------------------------------------------------
-# FILTERING LOGIC (FIXED)
+# SMART FILTERING (SOFT MATCHING)
 # -------------------------------------------------
 def filter_projects_by_query(projects, query):
     if not projects:
@@ -44,59 +41,59 @@ def filter_projects_by_query(projects, query):
     q = query.lower()
     results = []
 
+    cities = [
+        "mumbai","bangalore","hyderabad","delhi","goa","pune",
+        "chennai","kolkata","ahmedabad","jaipur","kochi",
+        "vizag","vijayawada","tirupati","warangal","guntur","nellore"
+    ]
+
     for p in projects:
+        score = 0
         city = p["city"].lower()
         ptype = p["property_type"].lower()
-        price = p["price_min"] or 0
+        name = p["name"].lower()
 
-        match = True
-
-        # City filter
-        cities = [
-            "mumbai","bangalore","hyderabad","delhi","goa","pune","chennai",
-            "kolkata","ahmedabad","jaipur","kochi","vizag","vijayawada",
-            "tirupati","warangal","guntur","nellore"
-        ]
+        # City matching
         for c in cities:
-            if c in q and c not in city:
-                match = False
+            if c in q and c in city:
+                score += 3
 
-        # Property type filter
-        if "villa" in q and "villa" not in ptype:
-            match = False
-        if "apartment" in q and "apartment" not in ptype:
-            match = False
-        if "flat" in q and "apartment" not in ptype:
-            match = False
+        # Property type
+        if "villa" in q and "villa" in ptype:
+            score += 2
+        if "apartment" in q and ("apartment" in ptype or "flat" in ptype):
+            score += 2
+        if "house" in q and "house" in ptype:
+            score += 2
 
-        # Budget filter
-        if "under" in q and "crore" in q:
-            if price and price > 2:
-                match = False
+        # Keyword relevance
+        for word in q.split():
+            if len(word) > 3 and (word in name or word in ptype):
+                score += 1
 
-        if match:
+        if score > 0:
+            p["__score"] = score
             results.append(p)
 
+    # Sort best matches first
+    results = sorted(results, key=lambda x: x["__score"], reverse=True)
+
+    # NEVER return empty
     return results if results else projects[:5]
 
 
 # -------------------------------------------------
 # BOT RESPONSE
 # -------------------------------------------------
-def generate_bot_response(projects):
+def generate_bot_response(projects, query):
     if not projects:
-        return "❌ No exact match found. Showing closest available properties."
+        return "❌ No exact match found. Showing best available properties."
 
-    responses = [
-        f"🏠 I found **{len(projects)} properties** for you. Check them on the right 👉",
-        f"✨ Great choice! Showing **{len(projects)} matching properties**.",
-        f"🎯 Here are **{len(projects)} properties** that match your search."
-    ]
-    return random.choice(responses)
+    return f"🏠 Found **{len(projects)} properties** matching: *{query}*"
 
 
 # -------------------------------------------------
-# BACKGROUND IMAGE
+# BACKGROUND IMAGE (OPTIONAL)
 # -------------------------------------------------
 def get_base64_image(path):
     if os.path.exists(path):
@@ -104,7 +101,7 @@ def get_base64_image(path):
             return base64.b64encode(f.read()).decode()
     return None
 
-bg_image = get_base64_image("background.jpg")
+bg = get_base64_image("background.jpg")
 
 # -------------------------------------------------
 # STREAMLIT CONFIG
@@ -116,13 +113,13 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# CSS
+# STYLES
 # -------------------------------------------------
-if bg_image:
+if bg:
     st.markdown(f"""
     <style>
     .stApp {{
-        background: url("data:image/jpg;base64,{bg_image}");
+        background: url("data:image/jpg;base64,{bg}");
         background-size: cover;
     }}
     </style>
@@ -130,7 +127,7 @@ if bg_image:
 
 st.markdown("""
 <style>
-.user-message {
+.user-msg {
     background: #6a5acd;
     color: white;
     padding: 12px;
@@ -138,7 +135,7 @@ st.markdown("""
     margin: 8px 0;
     text-align: right;
 }
-.bot-message {
+.bot-msg {
     background: white;
     padding: 12px;
     border-radius: 15px;
@@ -153,7 +150,7 @@ st.markdown("""
 if "model" not in st.session_state:
     with st.spinner("Loading AI model..."):
         st.session_state.model = RealEstateModel()
-        st.session_state.chat_history = []
+        st.session_state.chat = []
 
 # -------------------------------------------------
 # HEADER
@@ -167,32 +164,29 @@ left, right = st.columns(2)
 # CHAT SECTION
 # -------------------------------------------------
 with left:
-    if not st.session_state.chat_history:
-        st.markdown(
-            "<div class='bot-message'>👋 Ask me about properties in any Indian city!</div>",
-            unsafe_allow_html=True
-        )
+    if not st.session_state.chat:
+        st.markdown("<div class='bot-msg'>👋 Ask me about properties anywhere in India!</div>", unsafe_allow_html=True)
 
-    for msg in st.session_state.chat_history:
-        css = "user-message" if msg["type"] == "user" else "bot-message"
-        st.markdown(f"<div class='{css}'>{msg['content']}</div>", unsafe_allow_html=True)
+    for msg in st.session_state.chat:
+        css = "user-msg" if msg["role"] == "user" else "bot-msg"
+        st.markdown(f"<div class='{css}'>{msg['text']}</div>", unsafe_allow_html=True)
 
-    user_input = st.text_input(
-        "Ask about properties",
+    user_query = st.text_input(
+        "Ask something",
         placeholder="e.g., Apartments in Hyderabad",
         label_visibility="collapsed"
     )
 
-    if st.button("🔍 Search") and user_input:
-        st.session_state.chat_history.append({"type": "user", "content": user_input})
+    if st.button("🔍 Search") and user_query:
+        st.session_state.chat.append({"role": "user", "text": user_query})
 
-        with st.spinner("Searching..."):
-            result = st.session_state.model.process_query(user_input)
-            filtered = filter_projects_by_query(result["projects"], user_input)
+        with st.spinner("Searching properties..."):
+            result = st.session_state.model.process_query(user_query)
+            filtered = filter_projects_by_query(result["projects"], user_query)
 
-            bot_reply = generate_bot_response(filtered)
-            st.session_state.chat_history.append({"type": "bot", "content": bot_reply})
-            st.session_state.last_results = filtered
+            bot_reply = generate_bot_response(filtered, user_query)
+            st.session_state.chat.append({"role": "bot", "text": bot_reply})
+            st.session_state.results = filtered
 
         st.rerun()
 
@@ -202,8 +196,8 @@ with left:
 with right:
     st.subheader("🏢 Property Results")
 
-    if "last_results" in st.session_state and st.session_state.last_results:
-        for p in st.session_state.last_results:
+    if "results" in st.session_state:
+        for p in st.session_state.results:
             with st.expander(f"{p['name']} – {p['city']}"):
                 st.write(f"**Type:** {p['property_type']}")
                 st.write(f"**Location:** {p['location']}")
@@ -213,7 +207,7 @@ with right:
                 st.write(f"**Possession:** {p['possession_date']}")
                 st.write(f"**Description:** {p['description']}")
     else:
-        st.info("💬 Ask a question to see properties here.")
+        st.info("💬 Ask a question to see property results.")
 
 # -------------------------------------------------
 # SIDEBAR
@@ -231,19 +225,19 @@ with st.sidebar:
 
     for ex in examples:
         if st.button(ex):
-            st.session_state.chat_history.append({"type": "user", "content": ex})
+            st.session_state.chat.append({"role": "user", "text": ex})
             result = st.session_state.model.process_query(ex)
             filtered = filter_projects_by_query(result["projects"], ex)
-            st.session_state.chat_history.append({
-                "type": "bot",
-                "content": generate_bot_response(filtered)
+            st.session_state.chat.append({
+                "role": "bot",
+                "text": generate_bot_response(filtered, ex)
             })
-            st.session_state.last_results = filtered
+            st.session_state.results = filtered
             st.rerun()
 
     if st.button("🗑 Clear Chat"):
-        st.session_state.chat_history = []
-        st.session_state.pop("last_results", None)
+        st.session_state.chat = []
+        st.session_state.pop("results", None)
         st.rerun()
 
-    st.caption("🇮🇳 70+ Cities | AI Powered")
+    st.caption("🇮🇳 Pan-India | AI Powered")
